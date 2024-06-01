@@ -9,7 +9,6 @@ fn print_type_of<T>(_: &T) {
 struct Value<'a> {
     data: f64, 
     gradient: f64, 
-    // similar to linked list structure let's get this to work 
     children: Vec<&'a mut Value<'a>>,
 }
 
@@ -36,29 +35,26 @@ impl<'a> Value<'a> {
         }
     }
 
-    // fn addition(self: &mut Value, other: &mut Value) -> Value {
-    //     // print_type_of(&self);
-    //     self.gradient += 1.0;
-    //     other.gradient += 1.0;
-    //     Value {
-    //         data: self.data + other.data, 
-    //         gradient: 1.0,
-    //         children: vec![self, other],
-    //     }
-    // }
+    fn addition(self: &'a mut Value<'a>, other: &'a mut Value<'a>) -> Value {
+        // print_type_of(&self);
+        self.gradient += 1.0;
+        other.gradient += 1.0;
+        Value {
+            data: self.data + other.data, 
+            gradient: 0.0,
+            children: vec![self, other],
+        }
+    }
 
-    // fn backward(v : Value) -> Value {
-    //     // let seen = HashSet::new();
-    //     for mut node in v.children {
-    //         // if !(seen.contains(&node)) {
-    //             // seen.insert(node);
-    //         node.gradient = v.gradient * node.gradient;
-    //         Self::backward(node);
-    //         // }
-    //     }
-    //     v
-    // }
-
+    fn power(self: &'a mut Value<'a>, other: i32) -> Value {
+        // print_type_of(&self);
+        self.gradient += f64::from(other) * f64::powi(self.data, other - 1);
+        Value {
+            data: f64::powi(self.data, other), 
+            gradient: 0.0,
+            children: vec![self],
+        }
+    }
 
     // just going to do chain rule
     fn backward(&mut self) {
@@ -66,30 +62,39 @@ impl<'a> Value<'a> {
             node.gradient = node.gradient * self.gradient;
             node.backward();
         }
-
     }
 }
 
-#[derive(Debug)]
-struct Neuron {
-    weights: Vec<f64>, 
-    bias: f64,
-    parameters: Vec<f64>
-}
+// #[derive(Debug)]
+// struct Neuron {
+//     weights: Vec<Value>, 
+//     bias: Value,
+//     parameters: Vec<Value>,
+//     nonlin: bool,
+// }
 
-impl Neuron {
-    fn new(n: u64) -> Self {
-        Neuron{
-            weights: Vec::from_iter(0..n).iter().map(|_| { rand::thread_rng().gen_range(-1.0..=1.0)}).collect::<Vec<f64>>(),
-            bias: 0.0,
-            parameters: Vec::new(),
-        }
-    }   
+// impl Neuron {
+//     fn new(n: u64, nonlin: bool) -> Self {
+//         Neuron{
+//             weights: Vec::from_iter(0..n).iter().map(|_| { rand::thread_rng().gen_range(-1.0..=1.0)}).collect::<Vec<f64>>(),
+//             bias: 0.0,
+//             parameters: Vec::new(),
+//             nonlin: nonlin, 
+//         }
+//     }   
     
-    fn call(self, n : Vec<f64>) {
-        
-    }
-}
+//     fn call(&self, n: Vec<f64>) -> Value {
+//         let mut acc = self.bias;
+
+//         for (x, y) in (self.weights).iter().zip(n.iter()) {
+//             // we have to change this to be values
+//             acc += x * y;    
+//         }
+//         acc
+//         // write code for nonlin 
+//     }
+
+// }
 
 
 
@@ -109,7 +114,7 @@ fn main() {
     new_node.gradient = 1.0;
     ((&mut new_node).backward());
 
-    println!("{:#?}", Neuron::new(5));
+    // println!("{:#?}", Neuron::new(5))
     println!("Now {:#?} will print!", &new_node);
     // new_node.children.get(0).unwrap().data = 0.2; 
 }
