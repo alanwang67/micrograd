@@ -1,6 +1,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::hash::{Hash, Hasher};
 use rand::Rng;
+use std::collections::HashSet;
+
 // whats the difference between use::borrow:borrow_mut and regular
 #[derive(Debug)]
 struct ValueData {
@@ -22,42 +25,55 @@ impl Value {
     }
 
     // why do we need a mutable reference here, because we are mutating it's gradient
-    fn multiplication(&self, other: &Value) -> Self {
+    fn multiply(&self, other: &Value) -> Self {
         let self_data = self.0.borrow().data; // when is data cloned
         let other_data = other.0.borrow().data;
         self.0.borrow_mut().gradient += other_data;
         other.0.borrow_mut().gradient += self_data;
 
-        Value(Rc::new(RefCell::new(ValueData { data: self_data * other_data, gradient: 0.0, children: vec![Value(Rc::clone(&self.0)), Value(Rc::clone(&other.0))]})));
+        Value(Rc::new(RefCell::new(ValueData { data: self_data * other_data, gradient: 0.0, children: vec![Value(Rc::clone(&self.0)), Value(Rc::clone(&other.0))]})))
     }
 
-    // fn add(self: &'a mut Value<'a>, other: &'a mut Value<'a>) -> Value {
-    //     self.gradient += 1.0;
-    //     other.gradient += 1.0;
-    //     Value {
-    //         data: self.data + other.data, 
-    //         gradient: 0.0,
-    //         children: vec![self, other],
-    //     }
-    // }
+    fn add(&self, other: &Value) -> Self {
+        let self_data = self.0.borrow().data; 
+        let other_data = other.0.borrow().data;
+        self.0.borrow_mut().gradient += 1.0;
+        other.0.borrow_mut().gradient += 1.0;
 
-    // fn power(self: &'a mut Value<'a>, other: i32) -> Value {
-    //     self.gradient += f64::from(other) * f64::powi(self.data, other - 1);
-    //     Value {
-    //         data: f64::powi(self.data, other), 
-    //         gradient: 0.0,
-    //         children: vec![self],
-    //     }
-    // }
+        Value(Rc::new(RefCell::new(ValueData { data: self_data + other_data, gradient: 0.0, children: vec![Value(Rc::clone(&self.0)), Value(Rc::clone(&other.0))]})))
+    }
 
-    // just going to do chain rule
-    // fn backward(&mut self) {
-    //     for node in &mut self.children {
-    //         node.gradient = node.gradient * self.gradient;
-    //         node.backward();
-    //     }
-    // }
+    fn power(&self, other: i32) -> Self {
+        let self_data = self.0.borrow().data; 
+        self.0.borrow_mut().gradient += f64::from(other) * f64::powi(self_data, other - 1);
+
+        Value(Rc::new(RefCell::new(ValueData { data: f64::powi(self_data, other), gradient: 0.0, children: vec![Value(Rc::clone(&self.0))]})))
+    }
+
+    fn relu(&self) -> Self {
+        let self_data = self.0.borrow().data; 
+        let data = if self_data < 0.0 {0.0} else {self_data};
+        let self_grad = if self_data > 0.0 {1.0} else {0.0};
+        self.0.borrow_mut().gradient += self_grad;
+        Value(Rc::new(RefCell::new(ValueData { data: self_data, gradient: 0.0, children: vec![Value(Rc::clone(&self.0))]})))
+    }
+
+    fn backward(& self) {
+        let self_gradient = self.0.borrow().gradient; 
+        for node in &self.0.borrow().children {
+            let node_gradient = node.0.borrow_mut().gradient;
+            node.0.borrow_mut().gradient *= self_gradient;
+            node.backward();
+        }
+    }
 }
+
+
+// impl Hash for ValueData {
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         self.0.borrow().hash(state);
+//     }
+// }
 
 #[derive(Debug)]
 struct Neuron {
@@ -67,47 +83,69 @@ struct Neuron {
     nonlin: bool,
 }
 
-// impl<'a> Neuron<'a> {
-//     fn new(n: u64, nonlin: bool) -> Self {
-//         Neuron{
-//             weights: Vec::from_iter(0..n).iter().map(|_| { 
-//                 let data = rand::thread_rng().gen_range(-1.0..=1.0);
-//                 Value::new(data, 0.0, vec![])
+impl Neuron {
+    fn new(n: u64, nonlin: bool) -> Self {
+        Neuron{
+            weights: Vec::from_iter(0..n).iter().map(|_| { 
+                let data = rand::thread_rng().gen_range(-1.0..=1.0);
+                Value::new(data, 0.0, vec![])
 
-//             }).collect(),
-//             bias: Value::new(0.0, 0.0, vec![]),
-//             parameters: Vec::new(),
-//             nonlin: nonlin, 
-//         }
-//     }   
+            }).collect(),
+            bias: Value::new(0.0, 0.0, vec![]),
+            parameters: Vec::new(),
+            nonlin: nonlin, 
+        }
+    }   
     
-//     // its implied n is mutable since we are giving ownership to the vector of values
-//     fn call(&mut self, n: Vec<Value<'a>>) -> Value {
-//         // we want to make a new copy of bias here? 
-//         // how does borrow checking work 
-//         let mut acc = Value::new(self.bias.data, 0.0, vec![]); // do we want to implement a trait here? 
+    fn call(&self, n: Vec<Value>) -> Value {
+        let mut acc = Value(Rc::clone(&self.bias.0));
+        
+        for (x, y) in (self.weights).iter().zip(n.iter()) {
+            acc = acc.add(&(x.multiply(&y)))
+        }
 
-//         let mut index = 0; 
-//         for &mut x in self.weights { 
-//             let dot_product = x.multiplication(&n[index]);
-//             index += 1;
-//         }
+        if self.nonlin { 
+            acc.relu()
+        }
+        else { 
+            acc
+        }
+    }
 
-//         acc
-//     }
-// }
+    fn params(&self) -> Vec<Value> {
+        let bias = Value(Rc::clone(&self.bias.0));
+        let mut v = vec![bias];
+        for w in &self.weights {
+            v.push(Value(Rc::clone(&w.0)));
+        }
+        v
+    }
+
+}
 
 
 fn main() {
     // for now this will live on the stack 
-    let v1 = Value::new(0.3, 0.0, Vec::new());
-    let v2 = Value::new(0.5, 0.0, Vec::new());
+    let v1 = Value::new(2.0, 0.0, Vec::new());
+    let v2 = Value::new(6.0, 0.0, Vec::new());
 
     // let mut new_node = (&mut v).multiplication(&mut v1);
     // new_node.gradient = 1.0;
     // ((&mut new_node).backward());
 
     // println!("{:#?}", v1.multiplication(&v2))
+    // println!("{:#?}", Neuron::new(2, false).params())
+    // println!("{:#?}", Neuron::new(2, false).call(vec![v1,v2]))
+
+
+    // let new_node = v1.multiply(&v2);
+    // new_node.0.borrow_mut().gradient = 2.0;
+    // new_node.params();
+    
+
+
+    
+
     // println!("Now {:#?} will print!", &new_node);
     // new_node.children.get(0).unwrap().data = 0.2; 
 }
