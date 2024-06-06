@@ -81,15 +81,16 @@ pub struct MLP {
 }
 
 impl MLP {
-    pub fn new(nin: u64, mut nout: Vec<u64>) -> Self { 
+    pub fn new(nin: u64, mut nouts: Vec<u64>) -> Self { 
+        let length = nouts.len(); 
         let mut sz = vec![nin];
-        sz.append(&mut nout);
+        sz.append(&mut nouts);        
         let mut layers = vec![];
         let mut i = 0;
 
-        while i < nout.len() {
-            layers.push(Layer::new(*&sz[i], *&sz[i+1], i != (nout.len()-1)));
-            i += 1; // ? 
+        while i < length {
+            layers.push(Layer::new(*&sz[i], *&sz[i+1], i != (length-1)));
+            i += 1;
         }
 
         MLP {

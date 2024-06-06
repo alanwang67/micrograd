@@ -51,6 +51,19 @@ impl Value {
         Value(Rc::new(RefCell::new(ValueData { data: self_data + other_data, gradient: 0.0, children: vec![Value(Rc::clone(&self.0)), Value(Rc::clone(&other.0))]})))
     }
 
+    pub fn power(&self, other: &Value) -> Self {
+        let self_data = self.0.borrow().data; 
+        let other_data = other.0.borrow().data as i32; 
+        self.0.borrow_mut().gradient += f64::from(other_data) * f64::powi(self_data, other_data - 1);
+
+        Value(Rc::new(RefCell::new(ValueData { data: f64::powi(self_data, other_data), gradient: 0.0, children: vec![Value(Rc::clone(&self.0))]})))
+    }
+
+    pub fn subtract(&self, other: &Value) -> Self {
+        other.0.borrow_mut().data *= -1.0;
+        self.add(other)
+    }
+
     pub fn relu(&self) -> Self {
         let self_data = self.0.borrow().data; 
         let data = if self_data < 0.0 {0.0} else {self_data};
